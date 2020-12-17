@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/giridharmb/grpc-messagepb"
 	"google.golang.org/grpc"
+	"io"
 	"log"
 	"net"
 	"strconv"
@@ -12,6 +13,30 @@ import (
 )
 
 type server struct{}
+
+func (s *server) ClientStream(stream messagepb.MyDataService_ClientStreamServer) error {
+	fmt.Printf("\nClientStream was invoked, this will now read the stream of data from client...")
+	result := "DONE_FROM_SERVER"
+
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			// we have finished reading the client stream
+
+			myResponse := &messagepb.DataResponseClientStream{String_: result}
+
+			return stream.SendAndClose(myResponse)
+		}
+		if err != nil {
+			log.Fatalf("\nerror while reading the client stream : %v", err)
+		}
+		myRandomString := req.GetRandomString()
+		myIndex := req.GetIndex()
+
+		fmt.Printf("\nmyRandomString => %v", myRandomString)
+		fmt.Printf("\nmyIndex => %v", myIndex)
+	}
+}
 
 func (s *server) FetchData(request *messagepb.Request, stream messagepb.MyDataService_FetchDataServer) error {
 	fmt.Printf("\nFetchData was invoked, this will now stream data back to client...")
