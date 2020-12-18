@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
 	"fmt"
 	"github.com/giridharmb/grpc-messagepb"
 	"google.golang.org/grpc"
@@ -13,6 +14,30 @@ import (
 )
 
 type server struct{}
+
+func (s *server) BDStream(stream messagepb.MyDataService_BDStreamServer) error {
+	fmt.Printf("\nBDStream was invoked, this is a bi-directional stream...")
+	for {
+		req, err := stream.Recv()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			fmt.Printf("\nerror while reading from client stream : %v", err)
+			return err
+		}
+		firstName := req.GetLastName()
+		lastName := req.GetLastName()
+		combinedString := fmt.Sprintf("%v , %v", lastName, firstName)
+		dataBytes := []byte(combinedString)
+		md5Hash := fmt.Sprintf("%x", md5.Sum(dataBytes))
+		sendErr := stream.Send(&messagepb.BDStreamMessageResponse{Hash: md5Hash})
+		if sendErr != nil {
+			fmt.Printf("\nerror in sending back to client : %v", sendErr)
+			return sendErr
+		}
+	}
+}
 
 func (s *server) ClientStream(stream messagepb.MyDataService_ClientStreamServer) error {
 	fmt.Printf("\nClientStream was invoked, this will now read the stream of data from client...")
