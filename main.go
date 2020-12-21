@@ -7,13 +7,108 @@ import (
 	"github.com/giridharmb/grpc-messagepb"
 	"google.golang.org/grpc"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
+	"os"
 	"strconv"
+	"sync"
 	"time"
 )
 
+var mutex = &sync.Mutex{}
+
 type server struct{}
+
+func writeFileV1(name string, byteArray []byte) error {
+	err := ioutil.WriteFile(name, byteArray, 0644)
+	if err != nil {
+		fmt.Printf("\n(ERROR) : could not write to file (%v) : %v", name, err.Error())
+		return err
+	}
+
+	fmt.Printf("\nsuccessfully wrote to file : (%v)", name)
+	return nil
+}
+
+func writeFileV2(name string, byteArray []byte) error {
+	f, err := os.Create(name)
+	if err != nil {
+		fmt.Printf("\n(ERROR) : could not create file (%v) : %v", name, err.Error())
+		return err
+	}
+	defer func() {
+		_ = f.Close()
+	}()
+	totalBytesWritten, err := f.Write(byteArray)
+	if err != nil {
+		fmt.Printf("\n(ERROR) : could not write to file (%v) : %v", name, err.Error())
+		return err
+	}
+	fmt.Printf("\ntotalBytesWritten : %v", totalBytesWritten)
+	defer func() {
+		_ = f.Sync()
+	}()
+	return nil
+}
+
+func (s *server) BDTransfer(stream messagepb.MyDataService_BDTransferServer) error {
+
+	fmt.Printf("\nBDTransfer was invoked, this is a bi-directional stream...")
+
+	completeData := make([]byte, 0)
+
+	fileName := ""
+
+	waitChannel := make(chan struct{})
+
+	readBytes := make([]byte, 0)
+
+	totalBytesRead := 0
+
+	go func() {
+		fmt.Printf("\nGoing to read from stream...")
+		for {
+			req, err := stream.Recv()
+			if err == io.EOF {
+				fmt.Printf("\nClosing the channel...")
+				close(waitChannel)
+				fmt.Printf("\nClosed the channel.")
+				break
+			}
+			if err != nil {
+				fmt.Printf("\n(ERROR) : could not read from client stream : %v", err)
+			}
+
+			readBytes = req.GetData()
+
+			fileName = req.GetFileName()
+
+			totalFileSize := req.GetBytesTotalSize()
+
+			for _, data := range readBytes {
+				completeData = append(completeData, data)
+			}
+
+			totalBytesRead = totalBytesRead + len(readBytes)
+
+			percentComplete := float32(totalBytesRead) / float32(totalFileSize) * 100.0
+
+			sendErr := stream.Send(&messagepb.BDTransferResponse{PercentComplete: percentComplete})
+			if sendErr != nil {
+				fmt.Printf("\nerror in sending back to client : %v", sendErr)
+			}
+		}
+	}()
+
+	<-waitChannel
+
+	fmt.Printf("\nBDTransfer : io.EOF received.")
+
+	_ = writeFileV2(fileName, completeData)
+
+	return nil
+}
 
 func (s *server) BDStream(stream messagepb.MyDataService_BDStreamServer) error {
 	fmt.Printf("\nBDStream was invoked, this is a bi-directional stream...")
