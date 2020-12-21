@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/md5"
+	"flag"
 	"fmt"
 	"github.com/giridharmb/grpc-messagepb"
 	"google.golang.org/grpc"
@@ -78,6 +79,7 @@ func (s *server) BDTransfer(stream messagepb.MyDataService_BDTransferServer) err
 			}
 			if err != nil {
 				fmt.Printf("\n(ERROR) : could not read from client stream : %v", err)
+				break
 			}
 
 			readBytes = req.GetData()
@@ -185,12 +187,20 @@ func (*server) GetSum(ctx context.Context, req *messagepb.SumRequest) (*messagep
 }
 
 func main() {
-	fmt.Printf("\nserver ...")
 
-	lis, err := net.Listen("tcp", "0.0.0.0:50051")
+	var port string
+	flag.StringVar(&port, "port", "50051", "name of port on which server should listen")
+
+	flag.Parse()
+
+	hostAndPort := fmt.Sprintf("0.0.0.0:%v", port)
+
+	lis, err := net.Listen("tcp", hostAndPort)
 	if err != nil {
-		log.Fatalf("Failed to listen : %v", err)
+		log.Fatalf("\nFailed to listen on port (%v) : %v", port, err.Error())
 	}
+
+	fmt.Printf("\nRPC Server Is Listening on (%v) ...\n", hostAndPort)
 
 	myServer := grpc.NewServer()
 
